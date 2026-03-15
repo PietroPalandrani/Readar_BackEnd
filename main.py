@@ -3,7 +3,7 @@ import math
 import requests
 from datetime import datetime, timezone, timedelta
 from typing import List
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from google.cloud import firestore
 
@@ -27,8 +27,10 @@ def calculate_cosine_similarity(user_vector: dict, book_vector: dict):
     return float(numerator) / denominator
 
 
-# 1. Set the environment variable for Google Cloud credentials
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "google-keys.json"
+# 1. Set the environment variable for Google Cloud credentials if the file exists
+key_path = "google-keys.json"
+if os.path.exists(key_path):
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = key_path
 
 # 2. Initialize the Firestore client
 db = firestore.Client()
@@ -123,6 +125,10 @@ def rate_book(user_id: str, book_id: str, rating: int):
     # Path to the specific book in the user's library
     doc_ref = db.collection("users").document(user_id).collection("library").document(book_id)
 
+    # Validate that the document exists to prevent malformed records
+    if not doc_ref.get().exists:
+        raise HTTPException(status_code=404, detail="Book not found in user library. Add it first.")
+
     # Use merge=True to update only the 'rating' field without overwriting the rest
     doc_ref.set({"rating": rating}, merge=True)
 
@@ -133,15 +139,19 @@ def rate_book(user_id: str, book_id: str, rating: int):
 @app.get("/users/{user_id}/recommendations/genres")
 def get_genre_recommendations(user_id: str):
     # Retrieve the user's reading history (only rated books)
-    rated_books = db.collection("users").document(user_id).collection("library").where("rating", ">", 0).stream()
+    library_docs = list(db.collection("users").document(user_id).collection("library").stream())
 
-    # Build the User Profile based ONLY on genres
+    # Store titles of all books the user has in their library to filter out recommendations
+    read_book_titles = {doc.to_dict().get("title") for doc in library_docs}
+
+    # Build the User Profile based ONLY on genres for books with a rating
     user_genres = {}
-    for doc in rated_books:
+    for doc in library_docs:
         book = doc.to_dict()
         rating = book.get("rating", 0)
-        for genre in book.get("genres", []):
-            user_genres[genre] = user_genres.get(genre, 0) + rating
+        if rating > 0:
+            for genre in book.get("genres", []):
+                user_genres[genre] = user_genres.get(genre, 0) + rating
 
     if not user_genres:
         return {"message": "Rate some books to get genre-based recommendations!"}
@@ -159,6 +169,11 @@ def get_genre_recommendations(user_id: str):
         for item in res.get("items", []):
             book_info = item.get("volumeInfo", {})
             title = book_info.get("title", "Unknown Title")
+
+            # Skip the book if it is already in the user's library
+            if title in read_book_titles:
+                continue
+
             book_genres = book_info.get("categories", [])
 
             # Apply Cosine Similarity
@@ -180,17 +195,20 @@ def get_genre_recommendations(user_id: str):
 # Generate personalized recommendations based on the user's favorite author
 @app.get("/users/{user_id}/recommendations/authors")
 def get_author_recommendations(user_id: str):
-    # Retrieve the user's reading history
-    rated_books = db.collection("users").document(user_id).collection("library").where("rating", ">", 0).stream()
+    # Retrieve the user's complete library history
+    library_docs = list(db.collection("users").document(user_id).collection("library").stream())
+
+    # Store titles of all books the user has in their library
+    read_book_titles = {doc.to_dict().get("title") for doc in library_docs}
 
     # Build the User Profile based ONLY on authors
     user_authors = {}
-    for doc in rated_books:
+    for doc in library_docs:
         book = doc.to_dict()
         author = book.get("author", "")
         rating = book.get("rating", 0)
 
-        if author:
+        if author and rating > 0:
             # Save the maximum rating given to this author
             user_authors[author] = max(user_authors.get(author, 0), rating)
 
@@ -212,6 +230,10 @@ def get_author_recommendations(user_id: str):
     for item in res.get("items", []):
         book_info = item.get("volumeInfo", {})
         title = book_info.get("title", "Unknown Title")
+
+        # Skip the book if it is already in the user's library
+        if title in read_book_titles:
+            continue
 
         recommendations.append({
             "title": title,
