@@ -38,6 +38,8 @@ db = firestore.Client()
 # Initialize the FastAPI application
 app = FastAPI(title="Readar Backend")
 
+class StatusUpdate(BaseModel):
+    status: str
 
 # Define the Book model using Pydantic
 class Book(BaseModel):
@@ -288,4 +290,120 @@ def get_trending_books():
         "section": "Trending (Last 30 Days)",
         "total_unique_books": len(book_counts),
         "books": trending_list
+    }
+
+
+# Get a specific book from the user's library
+@app.get("/users/{user_id}/library/{book_id}")
+def get_book_from_library(user_id: str, book_id: str):
+    doc_ref = db.collection("users").document(user_id).collection("library").document(book_id)
+    doc = doc_ref.get()
+
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Book not found in user library.")
+
+    book_data = doc.to_dict()
+    book_data["id"] = doc.id
+    return book_data
+
+
+# Update the reading status of a specific book
+@app.patch("/users/{user_id}/library/{book_id}/status")
+def update_book_status(user_id: str, book_id: str, status_update: StatusUpdate):
+    valid_statuses = ["to_read", "reading", "read"]
+    if status_update.status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
+
+    doc_ref = db.collection("users").document(user_id).collection("library").document(book_id)
+
+    if not doc_ref.get().exists:
+        raise HTTPException(status_code=404, detail="Book not found in user library.")
+
+    doc_ref.update({"status": status_update.status})
+    return {"message": f"Book status updated to '{status_update.status}'."}
+
+
+# Remove a book from the user's library
+@app.delete("/users/{user_id}/library/{book_id}")
+def remove_book_from_library(user_id: str, book_id: str):
+    doc_ref = db.collection("users").document(user_id).collection("library").document(book_id)
+
+    if not doc_ref.get().exists:
+        raise HTTPException(status_code=404, detail="Book not found in user library.")
+
+    doc_ref.delete()
+    return {"message": "Book successfully removed from your library."}
+
+
+# Get detailed information for a specific book from Google Books API
+@app.get("/books/{google_book_id}")
+def get_book_details(google_book_id: str):
+    url = f"https://www.googleapis.com/books/v1/volumes/{google_book_id}"
+    response = requests.get(url)
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=404, detail="Book not found in Google Books API.")
+
+    data = response.json()
+    book_info = data.get("volumeInfo", {})
+
+    return {
+        "id": google_book_id,
+        "title": book_info.get("title", "Unknown Title"),
+        "authors": book_info.get("authors", ["Unknown Author"]),
+        "description": book_info.get("description", "No description available."),
+        "pageCount": book_info.get("pageCount", 0),
+        "categories": book_info.get("categories", []),
+        "publishedDate": book_info.get("publishedDate", "Unknown"),
+        "publisher": book_info.get("publisher", "Unknown"),
+        "imageLinks": book_info.get("imageLinks", {})
+    }
+
+
+# Get similar book recommendations based on a specific book in the user's library
+@app.get("/users/{user_id}/recommendations/similar/{book_id}")
+def get_similar_books(user_id: str, book_id: str):
+    # Retrieve the target book from the user's library
+    doc_ref = db.collection("users").document(user_id).collection("library").document(book_id)
+    doc = doc_ref.get()
+
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Book not found in user library.")
+
+    target_book = doc.to_dict()
+    target_title = target_book.get("title", "")
+    target_genres = target_book.get("genres", [])
+
+    if not target_genres:
+        return {"message": "Cannot find similar books because the target book has no genres listed."}
+
+    # Retrieve the user's complete library history to filter out read books
+    library_docs = list(db.collection("users").document(user_id).collection("library").stream())
+    read_book_titles = {d.to_dict().get("title") for d in library_docs}
+
+    # Query Google Books using the primary genre of the target book
+    main_genre = target_genres[0]
+    url = f"https://www.googleapis.com/books/v1/volumes?q=subject:{main_genre}&orderBy=relevance&maxResults=15"
+    response = requests.get(url)
+    data = response.json()
+
+    recommendations = []
+    for item in data.get("items", []):
+        book_info = item.get("volumeInfo", {})
+        title = book_info.get("title", "Unknown Title")
+
+        # Skip the book if it is the target book or already in the user's library
+        if title in read_book_titles or title == target_title:
+            continue
+
+        recommendations.append({
+            "google_book_id": item.get("id"),
+            "title": title,
+            "authors": book_info.get("authors", ["Unknown Author"]),
+            "categories": book_info.get("categories", [])
+        })
+
+    return {
+        "based_on_book": target_title,
+        "results": recommendations[:5]
     }
