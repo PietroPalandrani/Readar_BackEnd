@@ -407,3 +407,103 @@ def get_similar_books(user_id: str, book_id: str):
         "based_on_book": target_title,
         "results": recommendations[:5]
     }
+
+# Generate personalized recommendations for a specific requested genre
+@app.get("/users/{user_id}/recommendations/genre/{genre}")
+def get_specific_genre_recommendations(user_id: str, genre: str):
+    # Retrieve the user's reading history (only rated books)
+    library_docs = list(db.collection("users").document(user_id).collection("library").stream())
+
+    # Store titles of all books the user has in their library to filter out recommendations
+    read_book_titles = {doc.to_dict().get("title") for doc in library_docs}
+
+    # Build the User Profile based ONLY on genres for books with a rating
+    user_genres = {}
+    for doc in library_docs:
+        book = doc.to_dict()
+        rating = book.get("rating", 0)
+        if rating > 0:
+            for g in book.get("genres", []):
+                user_genres[g] = user_genres.get(g, 0) + rating
+
+    if not user_genres:
+        return {"message": "Rate some books to get personalized genre recommendations!"}
+
+    # Gather candidates from Google Books using the requested genre parameter
+    recommendations = []
+    url = f"https://www.googleapis.com/books/v1/volumes?q=subject:{genre}&orderBy=relevance&maxResults=15"
+    res = requests.get(url).json()
+
+    for item in res.get("items", []):
+        book_info = item.get("volumeInfo", {})
+        title = book_info.get("title", "Unknown Title")
+
+        # Skip the book if it is already in the user's library
+        if title in read_book_titles:
+            continue
+
+        book_genres = book_info.get("categories", [])
+
+        # Apply Cosine Similarity against the user's full genre profile
+        book_vector = {g: 1 for g in book_genres}
+        similarity_score = calculate_cosine_similarity(user_genres, book_vector)
+
+        if similarity_score > 0:
+            recommendations.append({
+                "title": title,
+                "genres": book_genres,
+                "match_score": round(similarity_score * 100, 2)  # Affinity percentage
+            })
+
+    # Sort by best match and return top 10
+    recommendations.sort(key=lambda x: x["match_score"], reverse=True)
+    return {"target_genre": genre, "results": recommendations[:10]}
+
+
+# Generate personalized recommendations for a specific requested author
+@app.get("/users/{user_id}/recommendations/author/{author}")
+def get_specific_author_recommendations(user_id: str, author: str):
+    # Retrieve the user's reading history
+    library_docs = list(db.collection("users").document(user_id).collection("library").stream())
+    read_book_titles = {doc.to_dict().get("title") for doc in library_docs}
+
+    # Build the User Profile based ONLY on genres for books with a rating
+    user_genres = {}
+    for doc in library_docs:
+        book = doc.to_dict()
+        rating = book.get("rating", 0)
+        if rating > 0:
+            for g in book.get("genres", []):
+                user_genres[g] = user_genres.get(g, 0) + rating
+
+    if not user_genres:
+        return {"message": "Rate some books to get personalized author recommendations!"}
+
+    # Gather candidates from Google Books using the requested author parameter
+    recommendations = []
+    url = f"https://www.googleapis.com/books/v1/volumes?q=inauthor:{author}&orderBy=relevance&maxResults=15"
+    res = requests.get(url).json()
+
+    for item in res.get("items", []):
+        book_info = item.get("volumeInfo", {})
+        title = book_info.get("title", "Unknown Title")
+
+        if title in read_book_titles:
+            continue
+
+        book_genres = book_info.get("categories", [])
+
+        # Apply Cosine Similarity against the user's full genre profile
+        book_vector = {g: 1 for g in book_genres}
+        similarity_score = calculate_cosine_similarity(user_genres, book_vector)
+
+        if similarity_score > 0:
+            recommendations.append({
+                "title": title,
+                "author": author,
+                "genres": book_genres,
+                "match_score": round(similarity_score * 100, 2)
+            })
+
+    recommendations.sort(key=lambda x: x["match_score"], reverse=True)
+    return {"target_author": author, "results": recommendations[:10]}

@@ -4,3 +4,4 @@ requests
 google-cloud-firestore
 firebase-admin
 pydantic
+protobuf
