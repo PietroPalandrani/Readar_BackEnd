@@ -8,6 +8,11 @@ from pydantic import BaseModel
 from google.cloud import firestore
 
 
+# --- API CONFIGURATION ---
+# Loads from environment variables first, falls back to your provided key
+GOOGLE_BOOKS_API_KEY = os.environ.get("GOOGLE_BOOKS_API_KEY", "AIzaSyCZjo7ceLtmnudyWK9kcsv8p54JRzPdhIk")
+
+
 # --- HELPER FUNCTIONS ---
 
 # Calculate the cosine similarity between two vectors (user preferences vs book genres)
@@ -92,8 +97,8 @@ def read_root():
 def search_books(query: str):
     clean_query = query.lower().strip()
 
-    # Append langRestrict=en to filter for English books
-    url = f"https://www.googleapis.com/books/v1/volumes?q={clean_query}&langRestrict=en"
+    # Append langRestrict=en and the API key
+    url = f"https://www.googleapis.com/books/v1/volumes?q={clean_query}&langRestrict=en&key={GOOGLE_BOOKS_API_KEY}"
     response = requests.get(url)
     data = response.json()
 
@@ -178,7 +183,7 @@ def get_genre_recommendations(user_id: str):
     fallback_recommendations = []
 
     for genre in top_2_genres:
-        url = f"https://www.googleapis.com/books/v1/volumes?q=subject:{genre}&orderBy=relevance&maxResults=15&langRestrict=en"
+        url = f"https://www.googleapis.com/books/v1/volumes?q=subject:{genre}&orderBy=relevance&maxResults=15&langRestrict=en&key={GOOGLE_BOOKS_API_KEY}"
         res = requests.get(url).json()
 
         for item in res.get("items", []):
@@ -230,7 +235,7 @@ def get_author_recommendations(user_id: str):
     if user_authors[top_author] < 4:
         return {"message": "You don't have a highly rated favorite author yet."}
 
-    url = f"https://www.googleapis.com/books/v1/volumes?q=inauthor:{top_author}&maxResults=15&langRestrict=en"
+    url = f"https://www.googleapis.com/books/v1/volumes?q=inauthor:{top_author}&maxResults=15&langRestrict=en&key={GOOGLE_BOOKS_API_KEY}"
     res = requests.get(url).json()
 
     recommendations = []
@@ -337,7 +342,7 @@ def remove_book_from_library(user_id: str, book_id: str):
 # Get detailed information for a specific book from Google Books API
 @app.get("/books/{google_book_id}")
 def get_book_details(google_book_id: str):
-    url = f"https://www.googleapis.com/books/v1/volumes/{google_book_id}"
+    url = f"https://www.googleapis.com/books/v1/volumes/{google_book_id}?key={GOOGLE_BOOKS_API_KEY}"
     response = requests.get(url)
 
     if response.status_code != 200:
@@ -345,7 +350,6 @@ def get_book_details(google_book_id: str):
 
     data = response.json()
 
-    # Fully handles parsing using the exact same standard as all other endpoints
     return extract_book_data(data)
 
 
@@ -369,7 +373,7 @@ def get_similar_books(user_id: str, book_id: str):
     read_book_titles = {d.to_dict().get("title") for d in library_docs}
 
     main_genre = target_genres[0]
-    url = f"https://www.googleapis.com/books/v1/volumes?q=subject:{main_genre}&orderBy=relevance&maxResults=15&langRestrict=en"
+    url = f"https://www.googleapis.com/books/v1/volumes?q=subject:{main_genre}&orderBy=relevance&maxResults=15&langRestrict=en&key={GOOGLE_BOOKS_API_KEY}"
     response = requests.get(url)
     data = response.json()
 
@@ -411,7 +415,7 @@ def get_specific_genre_recommendations(user_id: str, genre: str):
     recommendations = []
     fallback_recommendations = []
 
-    url = f"https://www.googleapis.com/books/v1/volumes?q=subject:{clean_genre}&orderBy=relevance&maxResults=15&langRestrict=en"
+    url = f"https://www.googleapis.com/books/v1/volumes?q=subject:{clean_genre}&orderBy=relevance&maxResults=15&langRestrict=en&key={GOOGLE_BOOKS_API_KEY}"
     res = requests.get(url).json()
 
     for item in res.get("items", []):
@@ -462,7 +466,7 @@ def get_specific_author_recommendations(user_id: str, author: str):
     recommendations = []
     fallback_recommendations = []
 
-    url = f"https://www.googleapis.com/books/v1/volumes?q=inauthor:{clean_author}&orderBy=relevance&maxResults=15&langRestrict=en"
+    url = f"https://www.googleapis.com/books/v1/volumes?q=inauthor:{clean_author}&orderBy=relevance&maxResults=15&langRestrict=en&key={GOOGLE_BOOKS_API_KEY}"
     res = requests.get(url).json()
 
     for item in res.get("items", []):
