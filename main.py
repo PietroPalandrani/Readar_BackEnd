@@ -6,6 +6,7 @@ from typing import List
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from google.cloud import firestore
+from typing import Optional
 
 
 # --- API CONFIGURATION ---
@@ -83,6 +84,17 @@ class Book(BaseModel):
     rating: int = 0
     status: str = "none"
 
+
+class UserProfile(BaseModel):
+    name: str
+    email: str
+    profile_image: str = "https://via.placeholder.com/150" # Default image
+
+
+class UserProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    profile_image: Optional[str] = None
 
 # --- ENDPOINTS ---
 
@@ -492,3 +504,53 @@ def get_specific_author_recommendations(user_id: str, author: str):
         recommendations.extend(fallback_recommendations[:needed])
 
     return {"target_author": author.title(), "results": recommendations[:10]}
+
+
+# Create or update a user profile
+@app.post("/users/{user_id}/profile")
+def create_user_profile(user_id: str, profile: UserProfile):
+    doc_ref = db.collection("users").document(user_id)
+
+    doc_ref.set({
+        "user_id": user_id,
+        "name": profile.name,
+        "email": profile.email,
+        "profile_image": profile.profile_image,
+        "created_at": datetime.now(timezone.utc)
+    }, merge=True)  # merge=True updates existing fields without deleting the library subcollection
+
+    return {"message": f"Profile for {profile.name} successfully created/updated."}
+
+
+# Get a user's profile information
+@app.get("/users/{user_id}/profile")
+def get_user_profile(user_id: str):
+    doc_ref = db.collection("users").document(user_id)
+    doc = doc_ref.get()
+
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="User profile not found.")
+
+    profile_data = doc.to_dict()
+    return profile_data
+
+
+# Update specific fields of a user's profile
+@app.patch("/users/{user_id}/profile")
+def update_user_profile(user_id: str, update_data: UserProfileUpdate):
+    doc_ref = db.collection("users").document(user_id)
+
+    # Verify the user actually exists before attempting an update
+    if not doc_ref.get().exists:
+        raise HTTPException(status_code=404, detail="User profile not found.")
+
+    # Convert the Pydantic model to a dictionary, removing any fields that were not provided (None values)
+    update_dict = {key: value for key, value in update_data.model_dump().items() if value is not None}
+
+    if not update_dict:
+        raise HTTPException(status_code=400, detail="No valid fields provided for update.")
+
+    # .update() applies the changes to specific fields without deleting the rest of the document
+    doc_ref.update(update_dict)
+
+    return {"message": "Profile successfully updated.", "updated_fields": list(update_dict.keys())}
