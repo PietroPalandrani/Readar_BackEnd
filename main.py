@@ -33,7 +33,6 @@ def calculate_cosine_similarity(user_vector: dict, book_vector: dict):
 def extract_book_data(item: dict) -> dict:
     book_info = item.get("volumeInfo", {})
 
-    # Extract the first author or default to "Unknown Author"
     authors_list = book_info.get("authors", ["Unknown Author"])
     primary_author = authors_list[0] if authors_list else "Unknown Author"
 
