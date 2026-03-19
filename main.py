@@ -57,10 +57,8 @@ key_path = "google-keys.json"
 if os.path.exists(key_path):
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = key_path
 
-# Initialize the Firestore client
 db = firestore.Client()
 
-# Initialize the FastAPI application
 app = FastAPI(title="Readar Backend")
 
 
@@ -70,7 +68,6 @@ class StatusUpdate(BaseModel):
     status: str
 
 
-# Define the Book model using Pydantic
 class Book(BaseModel):
     google_book_id: str
     title: str
@@ -97,7 +94,7 @@ class UserProfileUpdate(BaseModel):
 
 # --- ENDPOINTS ---
 
-# Root endpoint
+# Root
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the Readar backend!"}
@@ -516,7 +513,7 @@ def create_user_profile(user_id: str, profile: UserProfile):
         "email": profile.email,
         "profile_image": profile.profile_image,
         "created_at": datetime.now(timezone.utc)
-    }, merge=True)  # merge=True updates existing fields without deleting the library subcollection
+    }, merge=True)
 
     return {"message": f"Profile for {profile.name} successfully created/updated."}
 
