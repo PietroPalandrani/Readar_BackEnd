@@ -10,13 +10,13 @@ from typing import Optional
 
 
 # --- API CONFIGURATION ---
-# Loads from environment variables first, falls back to your provided key
+# Loads from variables first, falls back to key
 GOOGLE_BOOKS_API_KEY = os.environ.get("GOOGLE_BOOKS_API_KEY", "AIzaSyCZjo7ceLtmnudyWK9kcsv8p54JRzPdhIk")
 
 
 # --- HELPER FUNCTIONS ---
 
-# Calculate the cosine similarity between two vectors (user preferences vs book genres)
+# Calculate the cosine similarity between two vectors
 def calculate_cosine_similarity(user_vector: dict, book_vector: dict):
     intersection = set(user_vector.keys()) & set(book_vector.keys())
     numerator = sum([user_vector[x] * book_vector[x] for x in intersection])
@@ -33,7 +33,6 @@ def calculate_cosine_similarity(user_vector: dict, book_vector: dict):
 def extract_book_data(item: dict) -> dict:
     book_info = item.get("volumeInfo", {})
 
-    # Extract the first author or default to "Unknown Author"
     authors_list = book_info.get("authors", ["Unknown Author"])
     primary_author = authors_list[0] if authors_list else "Unknown Author"
 
@@ -53,15 +52,13 @@ def extract_book_data(item: dict) -> dict:
 
 # --- INITIALIZATION ---
 
-# 1. Set the environment variable for Google Cloud credentials if the file exists
+# Set the variable for Google Cloud credentials if the file exists
 key_path = "google-keys.json"
 if os.path.exists(key_path):
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = key_path
 
-# 2. Initialize the Firestore client
 db = firestore.Client()
 
-# Initialize the FastAPI application
 app = FastAPI(title="Readar Backend")
 
 
@@ -71,7 +68,6 @@ class StatusUpdate(BaseModel):
     status: str
 
 
-# Define the Book model using Pydantic (Updated with all fields)
 class Book(BaseModel):
     id: str
     title: str
@@ -98,7 +94,7 @@ class UserProfileUpdate(BaseModel):
 
 # --- ENDPOINTS ---
 
-# Root endpoint
+# Root
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the Readar backend!"}
@@ -109,7 +105,7 @@ def read_root():
 def search_books(query: str):
     clean_query = query.lower().strip()
 
-    # Append langRestrict=en and the API key
+
     url = f"https://www.googleapis.com/books/v1/volumes?q={clean_query}&langRestrict=en&key={GOOGLE_BOOKS_API_KEY}"
     response = requests.get(url)
     data = response.json()
@@ -517,7 +513,7 @@ def create_user_profile(user_id: str, profile: UserProfile):
         "email": profile.email,
         "profile_image": profile.profile_image,
         "created_at": datetime.now(timezone.utc)
-    }, merge=True)  # merge=True updates existing fields without deleting the library subcollection
+    }, merge=True)
 
     return {"message": f"Profile for {profile.name} successfully created/updated."}
 
@@ -540,17 +536,17 @@ def get_user_profile(user_id: str):
 def update_user_profile(user_id: str, update_data: UserProfileUpdate):
     doc_ref = db.collection("users").document(user_id)
 
-    # Verify the user actually exists before attempting an update
+    # Verify the user actually exists
     if not doc_ref.get().exists:
         raise HTTPException(status_code=404, detail="User profile not found.")
 
-    # Convert the Pydantic model to a dictionary, removing any fields that were not provided (None values)
+
     update_dict = {key: value for key, value in update_data.model_dump().items() if value is not None}
 
     if not update_dict:
         raise HTTPException(status_code=400, detail="No valid fields provided for update.")
 
-    # .update() applies the changes to specific fields without deleting the rest of the document
+
     doc_ref.update(update_dict)
 
     return {"message": "Profile successfully updated.", "updated_fields": list(update_dict.keys())}
