@@ -38,7 +38,7 @@ def extract_book_data(item: dict) -> dict:
     primary_author = authors_list[0] if authors_list else "Unknown Author"
 
     return {
-        "google_book_id": item.get("id", "Unknown ID"),
+        "id": item.get("id", "Unknown ID"),
         "title": book_info.get("title", "Unknown Title"),
         "author": primary_author,
         "pageCount": book_info.get("pageCount", 0),
@@ -73,7 +73,7 @@ class StatusUpdate(BaseModel):
 
 # Define the Book model using Pydantic (Updated with all fields)
 class Book(BaseModel):
-    google_book_id: str
+    id: str
     title: str
     author: str
     pageCount: int = 0
@@ -125,7 +125,7 @@ def search_books(query: str):
 # Save a book to a specific user's library
 @app.post("/users/{user_id}/library/add")
 def add_book_to_library(user_id: str, book: Book):
-    doc_ref = db.collection("users").document(user_id).collection("library").document(book.google_book_id)
+    doc_ref = db.collection("users").document(user_id).collection("library").document(book.id)
 
     doc_ref.set({
         "title": book.title,
@@ -352,9 +352,9 @@ def remove_book_from_library(user_id: str, book_id: str):
 
 
 # Get detailed information for a specific book from Google Books API
-@app.get("/books/{google_book_id}")
-def get_book_details(google_book_id: str):
-    url = f"https://www.googleapis.com/books/v1/volumes/{google_book_id}?key={GOOGLE_BOOKS_API_KEY}"
+@app.get("/books/{id}")
+def get_book_details(id: str):
+    url = f"https://www.googleapis.com/books/v1/volumes/{id}?key={GOOGLE_BOOKS_API_KEY}"
     response = requests.get(url)
 
     if response.status_code != 200:
