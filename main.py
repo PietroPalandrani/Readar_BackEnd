@@ -46,7 +46,8 @@ def extract_book_data(item: dict) -> dict:
         "description": book_info.get("description", "No description available."),
         "publishedDate": book_info.get("publishedDate", "Unknown"),
         "rating": 0,          # Default for books not yet in library
-        "status": "none"      # Default for books not yet in library
+        "status": "none",      # Default for books not yet in library
+        "added_at": book_info.get("added_at", "Unknown"),
     }
 
 
@@ -79,6 +80,7 @@ class Book(BaseModel):
     publishedDate: str = "Unknown"
     rating: int = 0
     status: str = "none"
+    added_at: datetime = datetime.now(timezone.utc)
 
 
 class UserProfile(BaseModel):
