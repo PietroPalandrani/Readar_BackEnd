@@ -1,7 +1,10 @@
 fastapi
-uvicorn
-requests
-google-cloud-firestore
+uvicorn[standard]
+httpx
+google-cloud-firestore>=2.13.0
 firebase-admin
 pydantic
+pydantic[email]
 protobuf
+starlette
+cachetools
