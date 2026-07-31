@@ -11,7 +11,7 @@ from typing import Optional
 
 # --- API CONFIGURATION ---
 # Loads from variables first, falls back to key
-GOOGLE_BOOKS_API_KEY = os.environ.get("GOOGLE_BOOKS_API_KEY", "AIzaSyCZjo7ceLtmnudyWK9kcsv8p54JRzPdhIk")
+GOOGLE_BOOKS_API_KEY = os.environ.get("GOOGLE_BOOKS_API_KEY")
 
 
 # --- HELPER FUNCTIONS ---
