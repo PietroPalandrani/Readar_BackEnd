@@ -1,0 +1,7 @@
+.gcloudignore
+.git/
+.idea/
+venv/
+.venv/
+__pycache__/
+google-keys.json
