@@ -1,148 +1,148 @@
 # Readar API
 
-Backend API sviluppato con **FastAPI** per l'applicazione Android **Readar**. Il servizio gestisce la ricerca dei libri tramite Google Books API, la memorizzazione delle librerie personali degli utenti su **Google Cloud Firestore**, l'autenticazione tramite **Firebase Admin** e un sistema di raccomandazione personalizzato basato sul calcolo numerico delle preferenze di genere.
+Backend API built with **FastAPI** for the **Readar** Android application. The service handles book searches via the Google Books API, personal library storage on **Google Cloud Firestore**, user authentication via **Firebase Admin**, and a personalized recommendation system based on quantitative genre preference scoring.
 
 ---
 
-## Funzionalità Principali
+## Key Features
 
-* **Ricerca e Catalogo Libri:**
-* Integrazione asincrona con l'API di Google Books con gestione automatica dei retry (exponential backoff).
-* Sistema di caching in memoria (`TTLCache`) a due livelli per ottimizzare le risposte e ridurre le chiamate di rete esterne (TTL di 12 ore per le ricerche, 10 minuti per i libri in tendenza).
-* Calcolo dei libri in tendenza negli ultimi 30 giorni aggregando i dati di tutte le librerie utente su Firestore.
-
-
-* **Gestione Libreria Personale:**
-* Operazioni complete di inserimento, lettura, aggiornamento ed eliminazione (CRUD) per i libri salvati dall'utente.
-* Tracciamento dello stato di lettura (`reading`, `read`) e valutazione numerica da 1 a 5 stelle.
+* **Book Search & Catalog:**
+* Asynchronous integration with the Google Books API, featuring automatic retry logic with exponential backoff.
+* Two-tier in-memory caching system (`TTLCache`) to optimize response times and reduce external network calls (12-hour TTL for search results, 10-minute TTL for trending books).
+* Calculation of trending books over the last 30 days by aggregating data across all user libraries in Firestore.
 
 
-* **Sistema di Raccomandazione:**
-* Generazione di suggerimenti personalizzati basati sulle valutazioni assegnate dall'utente ai singoli generi letterari e agli autori.
-* Calcolo di similarità quantitativa tra il profilo utente e i libri del catalogo.
+* **Personal Library Management:**
+* Full CRUD operations (Create, Read, Update, Delete) for books saved by the user.
+* Reading status tracking (`reading`, `read`) and numerical ratings from 1 to 5 stars.
 
 
-* **Sicurezza e Autenticazione:**
-* Verifica dei token JWT di Firebase Authentication su ogni endpoint protetto tramite `HTTPBearer`.
+* **Recommendation System:**
+* Personalized book suggestions generated from user ratings across individual literary genres and authors.
+* Quantitative similarity scoring between the user's taste profile and catalog items.
+
+
+* **Security & Authentication:**
+* Firebase Authentication JWT token verification on all protected endpoints using `HTTPBearer`.
 
 
 
 ---
 
-## Architettura e Tecnologie
+## Architecture & Tech Stack
 
-| Componente | Tecnologia | Utilizzo nel Progetto |
+| Component | Technology | Usage in Project |
 | --- | --- | --- |
-| **Framework Web** | FastAPI (Python 3.10+) | Gestione asincrona delle richieste HTTP e validazione con Pydantic v2. |
-| **Database** | Google Cloud Firestore | Archiviazione dei profili utente e delle librerie tramite client sincrono e asincrono. |
-| **Autenticazione** | Firebase Admin SDK | Validazione dei token JWT e identificazione sicura degli utenti (`uid`). |
-| **Client HTTP** | `httpx.AsyncClient` | Chiamate HTTP non bloccanti verso Google Books API con timeout e backoff. |
-| **Caching** | `cachetools.TTLCache` | Cache in memoria con scadenza temporale e rimozione LRU per limitare l'uso di risorse. |
+| **Web Framework** | FastAPI (Python 3.10+) | Asynchronous HTTP request handling and validation with Pydantic v2. |
+| **Database** | Google Cloud Firestore | Storage for user profiles and libraries using both sync and async clients. |
+| **Authentication** | Firebase Admin SDK | JWT token validation and secure user identification (`uid`). |
+| **HTTP Client** | `httpx.AsyncClient` | Non-blocking HTTP requests to the Google Books API with timeouts and retry backoff. |
+| **Caching** | `cachetools.TTLCache` | Time-to-live memory caching with LRU eviction to control resource usage. |
 
 ---
 
-## Algoritmo di Raccomandazione
+## Recommendation Algorithm
 
-Il sistema assegna un punteggio di compatibilità (`match_score`) a ciascun libro analizzato combinando due indici: **similarità di genere (80%)** e **popolarità del libro (20%)**.
+The system assigns a compatibility score (`match_score`) to each analyzed book by combining two metrics: **genre similarity (80%)** and **book popularity (20%)**.
 
-1. **Vettore delle Preferenze Utente:** Il sistema aggrega i generi dei libri valutati positivamente nella libreria dell'utente, associando a ciascun genere una frequenza pesata in base al punteggio in stelle assegnato.
-2. **Similarità del Coseno:** Per confrontare il profilo utente ($A$) con il vettore dei generi di un libro candidato ($B$), si calcola la similarità del coseno:
+1. **User Preference Vector:** The system aggregates genres from positively rated books in the user's library, assigning each genre a weighted frequency based on the star rating.
+2. **Cosine Similarity:** To compare the user profile ($A$) against a candidate book's genre vector ($B$), cosine similarity is calculated:
 
 $$\text{similarity}(A, B) = \frac{\sum_{i=1}^{n} A_i B_i}{\sqrt{\sum_{i=1}^{n} A_i^2} \sqrt{\sum_{i=1}^{n} B_i^2}}$$
 
 
-3. **Punteggio Finale:** La popolarità viene normalizzata sul numero di recensioni di Google Books (con tetto massimo a 10.000 recensioni):
+3. **Final Score:** Popularity is normalized against the Google Books review count (capped at 10,000 reviews):
 
-$$\text{match\_score} = \left( \text{similarity} \times 0.8 + \min\left(\frac{\text{ratings\_count}}{10000}, 1.0\right) \times 0.2 \right) \times 100$$
+$$\text{Score} = \left( \text{similarity} \times 0.8 + \min\left(\frac{\text{ratings}}{10000}, 1.0\right) \times 0.2 \right) \times 100$$
 
 
 
 ---
 
-## Prerequisiti e Configurazione
+## Prerequisites & Setup
 
-### 1. Requisiti di Sistema
+### 1. System Requirements
 
-* Python **3.10** o superiore.
-* Un progetto Google Cloud / Firebase con **Firestore** e **Firebase Authentication** abilitati.
-* Una chiave API valida per **Google Books API**.
+* Python **3.10** or higher.
+* A Google Cloud / Firebase project with **Firestore** and **Firebase Authentication** enabled.
+* A valid API key for the **Google Books API**.
 
-### 2. Variabili d'Ambiente e Credenziali
+### 2. Environment Variables & Credentials
 
-Crea le variabili d'ambiente necessarie prima di avviare il server:
+Set the required environment variables before starting the server:
 
 ```bash
-# Chiave API per Google Books
-export GOOGLE_BOOKS_API_KEY="la_tua_api_key_google_books"
+# Google Books API Key
+export GOOGLE_BOOKS_API_KEY="your_google_books_api_key"
 
-# Percorso verso il file di credenziali dell'account di servizio Firebase/GCP
+# Path to your Firebase/GCP service account credentials JSON file
 export GOOGLE_APPLICATION_CREDENTIALS="google-keys.json"
 
 ```
 
-> **Nota:** Se il file `google-keys.json` è presente direttamente nella directory radice del progetto, l'applicazione lo caricherà automaticamente.
+> **Note:** If `google-keys.json` is placed directly in the project root directory, the application loads it automatically.
 
-### 3. Installazione delle Dipendenze
+### 3. Dependency Installation
 
-Crea un ambiente virtuale e installa i pacchetti richiesti:
+Create a virtual environment and install the required packages:
 
 ```bash
 python -m venv venv
-source venv/bin/activate  # Su Windows: venv\Scripts\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install fastapi uvicorn httpx cachetools google-cloud-firestore firebase-admin pydantic
 
 ```
 
-### 4. Avvio del Server
+### 4. Running the Server
 
-Per avviare il server in ambiente di sviluppo con autoricarica:
+Start the development server with live reload enabled:
 
 ```bash
 uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 ```
 
-L'API sarà disponibile all'indirizzo `http://localhost:8000`. La documentazione interattiva OpenAPI (Swagger) è accessibile su `http://localhost:8000/docs`.
+The API will be available at `http://localhost:8000`. Interactive OpenAPI documentation (Swagger UI) is accessible at `http://localhost:8000/docs`.
 
 ---
 
-## Riepilogo degli Endpoint API
+## API Endpoints Overview
 
-### Pubblici & Ricerca
+### Public & Search
 
-| Metodo | Endpoint | Descrizione |
+| Method | Endpoint | Description |
 | --- | --- | --- |
-| `GET` | `/` | Controllo di stato del servizio (Health check). |
-| `GET` | `/search/{query}` | Cerca libri nel catalogo di Google Books (max 30 risultati). |
-| `GET` | `/trending` | Restituisce i 10 libri più aggiunti dagli utenti negli ultimi 30 giorni. |
-| `GET` | `/books/{book_id}` | Recupera i dettagli di un singolo libro tramite ID Google Books. |
+| `GET` | `/` | Service health check. |
+| `GET` | `/search/{query}` | Search books in the Google Books catalog (max 30 results). |
+| `GET` | `/trending` | Returns the 10 most-added books across all users in the last 30 days. |
+| `GET` | `/books/{book_id}` | Retrieve details for a single book by its Google Books ID. |
 
-### Profilo Utente (Richiede Autenticazione Bearer JWT)
+### User Profile (Requires Bearer JWT Authentication)
 
-| Metodo | Endpoint | Descrizione |
+| Method | Endpoint | Description |
 | --- | --- | --- |
-| `POST` | `/profile` | Crea o aggiorna un profilo utente nel database Firestore. |
-| `GET` | `/profile` | Restituisce i dati del profilo dell'utente autenticato. |
-| `PATCH` | `/profile` | Aggiorna campi specifici del profilo (nome, email, immagine). |
+| `POST` | `/profile` | Create or update a user profile in Firestore. |
+| `GET` | `/profile` | Retrieve profile data for the authenticated user. |
+| `PATCH` | `/profile` | Update specific profile fields (name, email, profile image). |
 
-### Libreria Personale (Richiede Autenticazione Bearer JWT)
+### Personal Library (Requires Bearer JWT Authentication)
 
-| Metodo | Endpoint | Descrizione |
+| Method | Endpoint | Description |
 | --- | --- | --- |
-| `POST` | `/library/add` | Aggiunge un nuovo libro alla libreria dell'utente. |
-| `GET` | `/library` | Restituisce l'elenco completo dei libri nella libreria dell'utente. |
-| `GET` | `/library/latest` | Restituisce l'ultimo libro inserito in ordine cronologico. |
-| `GET` | `/library/{book_id}` | Restituisce i dati di uno specifico libro presente in libreria. |
-| `PUT` | `/library/{book_id}/rate` | Assegna una valutazione numerica da 1 a 5 stelle. |
-| `PATCH` | `/library/{book_id}/status` | Aggiorna lo stato di lettura (`reading` o `read`). |
-| `DELETE` | `/library/{book_id}` | Rimuove un libro dalla libreria utente. |
+| `POST` | `/library/add` | Add a new book to the user's library. |
+| `GET` | `/library` | Return the full list of books in the user's library. |
+| `GET` | `/library/latest` | Return the most recently added book in chronological order. |
+| `GET` | `/library/{book_id}` | Return data for a specific book stored in the library. |
+| `PUT` | `/library/{book_id}/rate` | Assign a numerical rating from 1 to 5 stars. |
+| `PATCH` | `/library/{book_id}/status` | Update reading status (`reading` or `read`). |
+| `DELETE` | `/library/{book_id}` | Remove a book from the user's library. |
 
-### Raccomandazioni (Richiede Autenticazione Bearer JWT)
+### Recommendations (Requires Bearer JWT Authentication)
 
-| Metodo | Endpoint | Descrizione |
+| Method | Endpoint | Description |
 | --- | --- | --- |
-| `GET` | `/recommendations/genres` | Restituisce libri basati sui 2 generi preferiti dell'utente. |
-| `GET` | `/recommendations/authors` | Restituisce libri dell'autore con la valutazione più alta ($\ge 4$ stelle). |
-| `GET` | `/recommendations/similar/{book_id}` | Restituisce libri con generi simili a un volume presente in libreria. |
-| `GET` | `/recommendations/genre/{genre}` | Raccomandazioni filtrate per un genere specifico, ordinate per affinità. |
-| `GET` | `/recommendations/author/{author}` | Raccomandazioni filtrate per un autore specifico, ordinate per affinità. |
+| `GET` | `/recommendations/genres` | Return books based on the user's top 2 genres. |
+| `GET` | `/recommendations/authors` | Return books by the user's highest-rated author ($\ge 4$ stars). |
+| `GET` | `/recommendations/similar/{book_id}` | Return books with genres similar to a specific volume in the library. |
+| `GET` | `/recommendations/genre/{genre}` | Recommendations filtered by a specific genre, ranked by affinity score. |
+| `GET` | `/recommendations/author/{author}` | Recommendations filtered by a specific author, ranked by affinity score. |
